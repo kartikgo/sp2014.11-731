@@ -1,13 +1,40 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from nltk.stem.wordnet import WordNetLemmatizer
 import optparse
 import sys
 import math
+import re
 from collections import defaultdict
 from itertools import product
+numbers=re.compile('\d')
 optparser = optparse.OptionParser()
 optparser.add_option("-b", "--bitext", dest="bitext", default="data/dev-test-train.de-en", help="Parallel corpus (default data/dev-test-train.de-en)")
 optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxint, type="int", help="Number of sentences to use for training and alignment")
 (opts, _) = optparser.parse_args()
+lmt= WordNetLemmatizer()
+
+def contains_dig(word):
+		return bool(numbers.search(word))
+def lem(word):
+	word=word.lower()
+	mod= normalize(word)
+	if (mod==word):
+		mod=lmt.lemmatize(word)
+		if (mod==word):
+			mod=lmt.lemmatize(word,'v')
+	return mod
+def normalize(word):
+	mod=''
+	if contains_dig(word):
+		mod="0"
+	elif (word in ['.',',','!','-',':','?','(',')','[',']',';']):
+		mod="."
+	else:
+		mod= word
+	return mod
+#wl=['cars','fantasized','12th','87',':','Stabilität']
+#print map(lem,wl)
 
 sys.stderr.write("Training with IBM Model1.\n")
 sys.stderr.write("Initializing uniform probabilities.\n")
@@ -16,6 +43,10 @@ lex_prob = defaultdict(float)
 word_pairs=[]
 f_wrds=defaultdict(list)
 for (n, (f, e)) in enumerate(bitext):
+	#f=[words.lower() for words in f]
+	#e=[words.lower() for words in e]
+	f= map(lem,f)
+	e= map(lem,e)
 	word_pairs.append(list(set(product(f,e))))
 	if n % 500 == 0:
 		sys.stderr.write(".")
@@ -42,6 +73,10 @@ while ((likelihood-early_like > 0.5) or (counter<2)):
 	early_like=likelihood
 	for (n , (fs,es)) in enumerate(bitext):
 		fs.append("<nullholder>")
+		#fs= [word.lower() for word in fs]
+		#es= [word.lower() for word in es]
+		fs=	map(lem,fs)
+		es= map(lem,es)
 		tot_e=defaultdict(float)
 		for (i,e) in enumerate(es):
 			tot_e[e]=0.0
@@ -71,11 +106,18 @@ while ((likelihood-early_like > 0.5) or (counter<2)):
 
 for (f, e) in bitext:
 	#f.append("<nullholder>")
+	#e=[word.lower() for word in e]
+	#f= [word.lower() for word in f]
+	e= map(lem,e)
+	f=map(lem,f)
 	for (i, e_i) in enumerate(e): 
 		scores=[]
 		for (j1,f_j) in enumerate(f):
 			scores.append(lex_prob[(f_j,e_i)])
-		j= scores.index(max(scores))
+		high=max(scores)
+		j_l= [(s,abs(i-s)) for s,r in enumerate(scores) if r==high]
+		j_l= sorted(j_l,key=lambda x:x[1])
+		j= j_l[0][0]
 		if (lex_prob[("<nullholder>",e_i)]<scores[j]):
 			sys.stdout.write("%i-%i " % (j,i))
 		#else:
