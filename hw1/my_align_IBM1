@@ -1,0 +1,87 @@
+#!/usr/bin/env python
+import optparse
+import sys
+import math
+from collections import defaultdict
+from itertools import product
+optparser = optparse.OptionParser()
+optparser.add_option("-b", "--bitext", dest="bitext", default="data/dev-test-train.de-en", help="Parallel corpus (default data/dev-test-train.de-en)")
+optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxint, type="int", help="Number of sentences to use for training and alignment")
+(opts, _) = optparser.parse_args()
+
+sys.stderr.write("Training with IBM Model1.\n")
+sys.stderr.write("Initializing uniform probabilities.\n")
+bitext = [[sentence.strip().split() for sentence in pair.split(' ||| ')] for pair in open(opts.bitext)][:opts.num_sents]
+lex_prob = defaultdict(float)
+word_pairs=[]
+f_wrds=defaultdict(list)
+for (n, (f, e)) in enumerate(bitext):
+	word_pairs.append(list(set(product(f,e))))
+	if n % 500 == 0:
+		sys.stderr.write(".")
+	
+word_pairs= set([item for sublist in word_pairs for item in sublist])
+for (f,e) in word_pairs:
+		f_wrds[f].append(e)
+		f_wrds["<nullholder>"].append(e)
+f_wrds["<nullholder>"]=list(set(f_wrds["<nullholder>"]))
+for f in f_wrds:
+		for e in f_wrds[f]:
+				lex_prob[(f,e)]=1.0/len(f_wrds[f])
+for e in f_wrds["<nullholder>"]:
+	lex_prob[("<nullholder>",e)]=1.0/len(f_wrds["<nullholder>"])
+sys.stderr.write("\n null prob: "+str(lex_prob[("<nullholder>","the")])+" and "+str(lex_prob[("<nullholder>","book")]))
+likelihood=0.0
+early_like=0.0
+counter=0
+while ((likelihood-early_like > 0.5) or (counter<2)):
+#while counter<1:
+	sys.stderr.write("\nPerforming E step.\n")
+	lex_count= defaultdict(float)
+	lex_total= defaultdict(float)
+	early_like=likelihood
+	for (n , (fs,es)) in enumerate(bitext):
+		fs.append("<nullholder>")
+		tot_e=defaultdict(float)
+		for (i,e) in enumerate(es):
+			tot_e[e]=0.0
+			fore=0.0
+			for f in fs:
+				tot_e[e] += lex_prob[(f,e)]
+				fore += lex_prob[(f,e)]
+			if (i==0):
+				likelihood += math.log(fore)
+			else:
+				likelihood = likelihood+ math.log(fore)
+		for e in es:
+			for f in fs:
+				lex_count[(f,e)] += lex_prob[(f,e)]/tot_e[e]
+				lex_total[f] += lex_prob[(f,e)]/tot_e[e]
+		if n%500 ==0:
+			sys.stderr.write(".")
+	likelihood= likelihood/len(bitext)
+	sys.stderr.write("\nPerforming M step.\n")
+	for (n,(f,e)) in enumerate(lex_prob):
+		lex_prob[(f,e)] = lex_count[(f,e)]/lex_total[f]
+		if n%500000 == 0:
+			sys.stderr.write(".")
+	sys.stderr.write("\n Iteration: "+str(counter)+" Average Likelihood: "+str(likelihood)+" Previous: "+str(early_like)+"\n")
+	sys.stderr.write("\n null prob: "+str(lex_prob[("<nullholder>","the")])+" and "+str(lex_prob[("<nullholder>","book")]))
+	counter += 1
+
+for (f, e) in bitext:
+	#f.append("<nullholder>")
+	for (i, e_i) in enumerate(e): 
+		scores=[]
+		for (j1,f_j) in enumerate(f):
+			scores.append(lex_prob[(f_j,e_i)])
+		j= scores.index(max(scores))
+		if (lex_prob[("<nullholder>",e_i)]<scores[j]):
+			sys.stdout.write("%i-%i " % (j,i))
+		#else:
+		#	sys.stderr.write("nooooooooooooooooooooooooooooooooo\n")
+	sys.stdout.write("\n")
+
+					
+			
+
