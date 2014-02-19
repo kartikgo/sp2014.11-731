@@ -8,39 +8,26 @@ def union(f2e, e2f):
 	#return f2e.union(set([(v, k) for (k, v) in e2f]))
 	return f2e.union(e2f)
 
-def growDiag(f2e, e2f):
-	newf2e = list(intersect(f2e, e2f))
-	unionAl = list(union(f2e, e2f))
-	prevf2e = []
-	while set(prevf2e) != set(newf2e):
-		prevf2e = list(newf2e)
-		for (i, j) in prevf2e:
-			neighbors = [(i-1, j), (i+1, j), (i, j-1), (i, j+1), (i-1, j-1), (i-1, j+1), (i+1, j-1), (i+1, j+1)]
-			for (i1, j1) in neighbors:
-				if (i1, j1) in unionAl:
-					if (len(filter(lambda x: x[1] == j1, prevf2e))) == 0 or (len(filter(lambda x: x[0] == i1, prevf2e))) == 0:
-						newf2e.append((i1, j1))
-	return set(newf2e)
+def growDiag(f2e,e2f):
+	common= list(intersect(f2e,e2f))
+	combined= list(union(f2e,e2f))
+	done=[]
+	while set(done) != set(common):
+		done=common
+		cand=[]
+		for (i,j) in done:
+			neighbors=list(set([(i-1,j),(i-1,j-1),(i-1,j+1),(i+1,j),(i+1,j+1),(i+1,j-1),(i,j-1),(i,j+1)]).difference(set(common)))
+		#cand1=[]
+			for (i,j) in neighbors:
+				if (i,j) in combined:
+					if ((len(filter(lambda x:x[0]==i,done))==0) or (len(filter(lambda x: x[1]==j,done))==0)):
+						common.append((i,j))
+		#print len(cand),len(cand1)
+		#cand=list(intersect(set(cand),set(combined)))
+		#common.extend(cand)
+	return set(common)
 
-def growDiagFinal(f2e, e2f):
-	unionAl = list(union(f2e, e2f))
-	grown = list(growDiag(f2e, e2f))
-	for (i, j) in unionAl:
-		if (len(filter(lambda x: x[1] == j, grown))) == 0 or (len(filter(lambda x: x[0] == i, grown))) == 0:
-			grown.append((i, j))
-	return set(grown)
-		
-
-def growDiagFinalAnd(f2e, e2f):
-	unionAl = list(union(f2e, e2f))
-	grown = list(growDiag(f2e, e2f))
-	for (i, j) in unionAl:
-		if (len(filter(lambda x: x[1] == j, grown))) == 0 and (len(filter(lambda x: x[0] == i, grown))) == 0:
-			grown.append((i, j))
-	return set(grown)
-
-
-def readAlignments(fileh):
+def makeset(fileh):
 	alignments = {}
 	for ind, line in enumerate(fileh):
 		aligns = line.strip().split(" ")
@@ -53,23 +40,18 @@ def readAlignments(fileh):
 		alignments[ind] = sentaligns
 	return alignments
 
-"""
+
 f2efile = open(sys.argv[1])
 e2ffile = open(sys.argv[2])
 outfile = open(sys.argv[3], "w")
-f2ealignments = readAlignments(f2efile)
-e2falignments = readAlignments(e2ffile)
+f2esets = makeset(f2efile)
+e2fsets = makeset(e2ffile)
 
-for k in range(len(f2ealignments)):
-	#print >>sys.stderr, "intersection", intersect(f2ealignments[k], e2falignments[k])
-	#print >>sys.stderr, "union", union(f2ealignments[k], e2falignments[k])
-	#print >>sys.stderr, "growDiag", growDiag(f2ealignments[k], e2falignments[k])
-	#print >>sys.stderr, "growDiagFinal", growDiagFinal(f2ealignments[k], e2falignments[k])
-	grownf2e = union(f2ealignments[k], e2falignments[k])
-	#print f2ealignments[k], e2falignments[k], grownf2e
-	grownaligns = []
-	for (i, j) in grownf2e:
-		grownaligns.append("%d-%d"%(i, j))
-	print >>outfile, " ".join(grownaligns)
-"""
+for ctr in range(len(f2esets)):
+	symm = growDiag(f2esets[ctr], e2fsets[ctr])
+	towrite = []
+	for (i, j) in symm:
+		towrite.append("%d-%d"%(i, j))
+	print >>outfile, " ".join(towrite)
+
 

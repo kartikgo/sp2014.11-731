@@ -3,21 +3,19 @@
 from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.stem.snowball import GermanStemmer
 import optparse
-import cPickle
 import sys
 import math
 import re
 from collections import defaultdict
 from itertools import product
+import cPickle
 numbers=re.compile('\d')
 optparser = optparse.OptionParser()
 optparser.add_option("-b", "--bitext", dest="bitext", default="data/dev-test-train.de-en", help="Parallel corpus (default data/dev-test-train.de-en)")
 optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxint, type="int", help="Number of sentences to use for training and alignment")
 (opts, _) = optparser.parse_args()
 lmt= WordNetLemmatizer()
-ger= GermanStemmer()
-def contains_dig(word):
-		return bool(numbers.search(word))
+ger=GermanStemmer()
 
 def gstem(word):
 	word=word.decode("utf-8")
@@ -27,6 +25,8 @@ def gstem(word):
 		mod=ger.stem(word)
 	return mod
 
+def contains_dig(word):
+		return bool(numbers.search(word))
 def lem(word):
 	word=word.lower()
 	mod= normalize(word)
@@ -49,15 +49,15 @@ def normalize(word):
 
 sys.stderr.write("Training with IBM Model1.\n")
 sys.stderr.write("Initializing uniform probabilities.\n")
-bitext = [[sentence.strip().split() for sentence in pair.split(' ||| ')] for pair in open(opts.bitext)][:opts.num_sents]
+bitext = [[sentence.strip().split() for sentence in pair.split(' ||| ')[::-1]] for pair in open(opts.bitext)][:opts.num_sents]
 lex_prob = defaultdict(float)
 word_pairs=[]
 f_wrds=defaultdict(list)
 for (n, (f, e)) in enumerate(bitext):
 	#f=[words.lower() for words in f]
 	#e=[words.lower() for words in e]
-	f= map(gstem,f)
-	e= map(lem,e)
+	f= map(lem,f)
+	e= map(gstem,e)
 	word_pairs.append(list(set(product(f,e))))
 	if n % 500 == 0:
 		sys.stderr.write(".")
@@ -86,8 +86,8 @@ while ((likelihood-early_like > 0.5) or (counter<2)):
 		fs.append("<nullholder>")
 		#fs= [word.lower() for word in fs]
 		#es= [word.lower() for word in es]
-		fs=	map(gstem,fs)
-		es= map(lem,es)
+		fs=	map(lem,fs)
+		es= map(gstem,es)
 		tot_e=defaultdict(float)
 		for (i,e) in enumerate(es):
 			tot_e[e]=0.0
@@ -119,8 +119,8 @@ for (f, e) in bitext:
 	#f.append("<nullholder>")
 	#e=[word.lower() for word in e]
 	#f= [word.lower() for word in f]
-	e= map(lem,e)
-	f=map(gstem,f)
+	e= map(gstem,e)
+	f=map(lem,f)
 	for (i, e_i) in enumerate(e): 
 		scores=[]
 		for (j1,f_j) in enumerate(f):
@@ -130,11 +130,11 @@ for (f, e) in bitext:
 		j_l= sorted(j_l,key=lambda x:x[1])
 		j= j_l[0][0]
 		if (lex_prob[("<nullholder>",e_i)]<scores[j]):
-			sys.stdout.write("%i-%i " % (j,i))
+			sys.stdout.write("%i-%i " % (i,j))
 		#else:
 		#	sys.stderr.write("nooooooooooooooooooooooooooooooooo\n")
 	sys.stdout.write("\n")
-cPickle.dump(lex_prob,open("f2e_weights.db","wb"))
+cPickle.dump(lex_prob,open("e2f_weights.db","wb"))
 					
 			
 
