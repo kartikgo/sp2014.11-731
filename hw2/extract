@@ -99,7 +99,7 @@ def extract_features(hyp, ref):
   hm= 0.9*hmword+ 0.01*hmbigram + 0.05*hmtrigram + 0.04*hmqrigram
   corrf= 0.5*corr_tri+0.3*corr_qri+0.2*corr_bi
   #sys.stderr.write(str(ratio)+' '+str(refscore)+' '+str(hypscore)+' '+str(corr)+'\n')
-  return {'rec':rec, 'charlength':charlength, 'harmonic_mean':hm,'hm_bi':hmbigram, 'ratio':ratio,'corr_bi':corrf,'occ_rat':occ_rat}#,'hscore':hypscore,'rscore':refscore}#{'charlength':charlength,'harmonic_mean':hmword,'harmonic_bi':hmbigram, 'harmonic_tri':hmtrigram, 'harmonic_qri':hmqrigram,'rec':rec}#,'rec':rec,'rec_t':rec_t,'rec_bi':rec_bi,'rec_tri':rec_tri,'rec_qri':rec_qri}#, 'length':length}#, 'harmonic_qri':hmqrigram}
+  return {'rec':rec, 'charlength':charlength, 'harmonic_mean':hm,'hm_bi':hmbigram, 'ratio':ratio,'corr_bi':corrf}#,'hscore':hypscore,'rscore':refscore}#{'charlength':charlength,'harmonic_mean':hmword,'harmonic_bi':hmbigram, 'harmonic_tri':hmtrigram, 'harmonic_qri':hmqrigram,'rec':rec}#,'rec':rec,'rec_t':rec_t,'rec_bi':rec_bi,'rec_tri':rec_tri,'rec_qri':rec_qri}#, 'length':length}#, 'harmonic_qri':hmqrigram}
   #return {'prec':prec, 'rec':rec, 'prec_t':prec_t, 'rec_t':rec_t, 'prec_bi':prec_bi, 'rec_bi':rec_bi, 'prec_bit':prec_bit, 'rec_bit':rec_bit, 'prec_tri':prec_tri, 'rec_tri':rec_tri, 'prec_trit':prec_trit, 'rec_trit':rec_trit}
 argparser = argparse.ArgumentParser(prog='extract')
 argparser.add_argument('-x', '--pairs', dest='pairs', default='data/en-cs.pairs', help='Reference-Hypothesis pairs')
