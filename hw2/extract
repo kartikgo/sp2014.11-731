@@ -1,16 +1,106 @@
 #!/usr/bin/env python
-
+import kenlm
 import argparse
 import json
 import os, sys, math
+import cPickle
 
+model = kenlm.LanguageModel('czlm.binary')
+db= cPickle.load(open('brown.db','rb'))
+invdb= cPickle.load(open('brinv.db','rb'))
+def calc_precrec(hwords,rwords):
+	precision=0.0
+	recall=0.0
+	correct=0.0
+	lmscore=0.0
+	if not((len(hwords)==0) or(len(rwords)==0)):
+		refset= set(rwords)
+		correct=sum(1.0 for word in hwords if word in refset)
+		if 'tuple' in str(type(hwords[0])):
+			lmscore= sum(sum(model.score(word) for word in gram) for gram in hwords if gram in refset)
+		else:
+			lmscore= sum(model.score(word) for word in hwords if word in refset)
+		precision= correct/len(hwords)
+		recall=correct/len(rwords)
+	return (precision,recall,lmscore)
+
+def cluster_presence(hwords, rwords):
+	occ=0.0
+	lengs= [len(wrd) for wrd in rwords]
+	k=rwords[lengs.index(max(lengs))]
+	if k in invdb:
+		cl= invdb[k]
+		#print cl
+		for w in hwords:
+			ll= cPickle.loads(db[cl])
+			if w in ll:
+				occ += 1.0
+	return occ
+def har_mean(p,pt,r,rt):
+	har_mean=0.0
+	pp=0.0
+	rr=0.0
+	#if not((p==0.0) or (pt==0.0) or (r==0.0) or (rt==0.0)):
+	if ((p==0.0) or (r==0.0)):
+		pp= 0.5*p + 0.5*pt
+		rr= 0.5*r + 0.5*rt
+	else:
+		pp= 0.6*p + 0.4*pt
+		rr= 0.6*r+0.4*rt
+	if not((pp==0.0) or (rr==0.0)):
+		#har_mean= 6.0/sum([2.0/p,1.0/pt,2.0/r,1.0/rt])
+		har_mean = 2.0/sum([1.0/pp,1.0/rr])
+	return har_mean
 def extract_features(hyp, ref):
-  hwords = hyp.lower().split()
-  rwords = ref.lower().split()
-  refset = set(rwords)
-  precision = sum(1.0 for word in hwords if word in refset) / len(hwords)
-  return {'prec':precision}
 
+  hypscore=(model.score(hyp))
+  refscore=(model.score(ref))
+  ratio= refscore-hypscore
+  hwords = [k for k in hyp.lower().split() if k not in ['.',',',':','?','!']]
+  rwords = [k for k in ref.lower().split() if k not in ['.',',',':','?','!']]
+  occ= cluster_presence(hwords,rwords)
+  occ_rat= str(occ/len(rwords))
+  htrunc = [k[:4] for k in hwords]
+  rtrunc = [k[:4] for k in rwords]
+  htrunc1= [k[:6] for k in hwords]
+  rtrunc1= [k[:6] for k in rwords]
+  hbigrams= [(hwords[l],hwords[l+1]) for l in range(len(hwords[:-1]))]
+  rbigrams= [(rwords[l],rwords[l+1]) for l in range(len(rwords[:-1]))]
+  hbitrunc= [(htrunc[l],htrunc[l+1]) for l in range(len(htrunc[:-1]))]
+  rbitrunc= [(rtrunc[l],rtrunc[l+1]) for l in range(len(rtrunc[:-1]))]
+  htrigrams= [tuple(((hwords[l],hwords[l+1],hwords[l+2]))) for l in range(len(hwords[:-2]))]
+  rtrigrams= [tuple(((rwords[l],rwords[l+1],rwords[l+2]))) for l in range(len(rwords[:-2]))]
+  htritrunc= [tuple(((htrunc[l],htrunc[l+1],htrunc[l+2]))) for l in range(len(htrunc[:-2]))]
+  rtritrunc= [tuple(((rtrunc[l],rtrunc[l+1],rtrunc[l+2]))) for l in range(len(rtrunc[:-2]))]
+  hqrigrams= [(hwords[l],hwords[l+1],hwords[l+2],hwords[l+3]) for l in range(len(hwords[:-3]))]
+  rqrigrams= [(rwords[l],rwords[l+1],rwords[l+2],rwords[l+3]) for l in range(len(rwords[:-3]))]
+  hqritrunc= [(htrunc[l],htrunc[l+1],htrunc[l+2],htrunc[l+3]) for l in range(len(htrunc[:-3]))]
+  rqritrunc= [(rtrunc[l],rtrunc[l+1],rtrunc[l+2],rtrunc[l+3]) for l in range(len(rtrunc[:-3]))]
+  #print hwords,rwords,hbigrams,rbigrams,htrunc,rtrunc
+  prec,rec,corr = calc_precrec(hwords,rwords)
+  prec_t,rec_t,corr_t= calc_precrec(htrunc,rtrunc)
+  prec_bi,rec_bi,corr_bi= calc_precrec(hbigrams,rbigrams)
+  prec_bit,rec_bit,corr_bit= calc_precrec(hbitrunc,rbitrunc)
+  prec_tri,rec_tri,corr_tri= calc_precrec(htrigrams,rtrigrams)
+  prec_trit,rec_trit,corr_trit= calc_precrec(htritrunc,rtritrunc)
+  prec_qri,rec_qri,corr_qri= calc_precrec(hqrigrams,rqrigrams)
+  prec_qrit,rec_qrit,rec_qrit= calc_precrec(hqritrunc,rqritrunc)
+  prec1,rec1,corr1= calc_precrec(htrunc1,rtrunc1)
+  #calculate harmonic mean
+  
+  hmword= har_mean(prec,prec_t,rec,rec_t)
+  hmbigram= har_mean(prec_bi,prec_bit,rec_bi,rec_bit)
+  hmtrigram= har_mean(prec_tri,prec_trit,rec_tri,rec_trit)
+  hmqrigram= har_mean(prec_qri,prec_qrit,rec_qri,rec_qrit)
+  hmword1= har_mean(prec,prec1,rec,rec1)
+  length= len(hwords)*1.0/len(rwords)
+  charlength= len(hyp.lower())*1.0/len(ref.lower())
+  fin_rec= 0.9*rec + 0.05*(rec_t) + 0.05*(rec1)
+  hm= 0.9*hmword+ 0.01*hmbigram + 0.05*hmtrigram + 0.04*hmqrigram
+  corrf= 0.5*corr_tri+0.3*corr_qri+0.2*corr_bi
+  #sys.stderr.write(str(ratio)+' '+str(refscore)+' '+str(hypscore)+' '+str(corr)+'\n')
+  return {'rec':rec, 'charlength':charlength, 'harmonic_mean':hm,'hm_bi':hmbigram, 'ratio':ratio,'corr_bi':corrf,'occ_rat':occ_rat}#,'hscore':hypscore,'rscore':refscore}#{'charlength':charlength,'harmonic_mean':hmword,'harmonic_bi':hmbigram, 'harmonic_tri':hmtrigram, 'harmonic_qri':hmqrigram,'rec':rec}#,'rec':rec,'rec_t':rec_t,'rec_bi':rec_bi,'rec_tri':rec_tri,'rec_qri':rec_qri}#, 'length':length}#, 'harmonic_qri':hmqrigram}
+  #return {'prec':prec, 'rec':rec, 'prec_t':prec_t, 'rec_t':rec_t, 'prec_bi':prec_bi, 'rec_bi':rec_bi, 'prec_bit':prec_bit, 'rec_bit':rec_bit, 'prec_tri':prec_tri, 'rec_tri':rec_tri, 'prec_trit':prec_trit, 'rec_trit':rec_trit}
 argparser = argparse.ArgumentParser(prog='extract')
 argparser.add_argument('-x', '--pairs', dest='pairs', default='data/en-cs.pairs', help='Reference-Hypothesis pairs')
 
@@ -24,4 +114,3 @@ for ref_hyp in open(args.pairs):
   ref, hyp = ref_hyp.rstrip().split(' ||| ')
   fmap = extract_features(hyp, ref)
   print json.dumps(fmap)   # print evaluation feature map
-
