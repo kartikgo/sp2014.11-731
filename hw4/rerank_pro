@@ -1,0 +1,235 @@
+#!/usr/bin/env python
+import optparse
+import cPickle
+import sys
+import bleu
+import random
+import csv
+from math import exp
+import cPickle
+from collections import Counter
+#eng= cPickle.load(open("eng.db","rb"))
+def sendstats(s1,s2):
+	u1= Counter(s1)
+	u2= Counter(s2)
+	yield sum((u1-u2).values())
+	yield sum((u2-u1).values())
+	yield sum((u1&u2).values())
+	bigrams1=[]
+	bigrams2=[]
+	for i in xrange(len(s1)-1):
+		bigrams1.append((s1[i],s1[i+1]))
+	for i in xrange(len(s2)-1):
+		bigrams2.append((s2[i],s2[i+1]))
+	b1= Counter(bigrams1)
+	b2= Counter(bigrams2)
+	yield sum((b1-b2).values())
+	yield sum((b2-b1).values())
+	yield sum((b1&b2).values())
+	trigrams1=[]
+	trigrams2=[]
+	for i in xrange(len(s1)-2):
+		trigrams1.append((s1[i],s1[i+1],s1[i+2]))
+	for i in xrange(len(s2)-2):
+		trigrams2.append((s2[i],s2[i+1],s2[i+2]))
+	t1= Counter(trigrams1)
+	t2= Counter(trigrams2)
+	yield sum((t1-t2).values())
+	yield sum((t2-t1).values())
+	yield sum((t1&t2).values())
+#def brown(k):
+#	try:
+#		return eng[k]
+#	except:
+#		return '-1'
+def binary_search(inlist,query,i,j):
+	if i==len(inlist):
+		return "You Idiot!"
+	if j==i:
+		return i
+	if (((j-i)==1) and (inlist[i]<query)):
+		return j
+	candidate = (i+j)/2
+	if inlist[candidate]== query:
+		return candidate
+	if inlist[candidate] < query:
+		return binary_search(inlist,query,candidate,j)
+	elif inlist[candidate] > query:
+		return binary_search(inlist,query,i,candidate)
+# We know that the lists are sorted! So, merge sort might be the best
+def merge_sort(list1,list2):
+	#print type(list1),type(list2)
+	if (list1==[]):
+		#print "empty stuff"
+		return list2
+	# if list2 is outside list1
+	elif not(list1[-1][1] > list2[0][1]):
+		list1.extend(list2)
+		return list1
+	# if list1 is outside list2
+	elif not(list2[-1][1] > list1[0][1]):
+		list2.extend(list1)
+		return list2
+	else:
+		result=[]
+		l_id,r_id = 0, 0
+		while l_id < len(list1) and r_id < len(list2):
+			if list1[l_id][1] <= list2[r_id][1]:
+				result.append(list1[l_id])
+				l_id +=1
+			else:
+				result.append(list2[r_id])
+				r_id += 1
+		if ((l_id == len(list1)) and not(r_id == len(list2))):
+			result += list2[r_id:]
+		if ((r_id == len(list2))and not(l_id == len(list1))):
+			result += list1[l_id:]
+		return result
+	
+
+def sample(weights,num_samples):
+	totals = []
+	running_total = 0
+
+	for ind,w,tr in weights:
+		running_total += w
+		totals.append(running_total)
+	mx= len(totals)
+	cand= ''
+	cand1=''
+	i=0
+	done=[]
+	seen=[]
+	while i < num_samples:
+		rnd = random.random() * running_total
+		to_add = binary_search(totals,rnd,0,mx)
+		cand= weights[to_add]
+		if not(to_add in done):
+			i += 1
+			done.append(to_add)
+			yield cand
+		else:
+			continue
+	
+
+optparser = optparse.OptionParser()
+optparser.add_option("--test",action="store_true",dest="test")
+optparser.add_option("--train",action="store_true",dest="train")
+optparser.add_option("-p","--prune",dest="prune",default=80000, help= "Max points to consider for classification")
+optparser.add_option("-s","--sample",dest="sampleset", default=1000,help="Max points to sample for a single sentence during training")
+
+optparser.add_option("-r","--reference", dest="ref", default= "data/dev.ref",help="reference set")
+optparser.add_option("-k", "--kbest-list", dest="input", default="data/test.100best", help="100-best translation lists")
+optparser.add_option("-l", "--lm", dest="lm", default=-1.0, type="float", help="Language model weight")
+optparser.add_option("--tm1", dest="tm1", default=-0.5, type="float", help="Translation model p(e|f) weight")
+optparser.add_option("--tm2", dest="tm2", default=-0.5, type="float", help="Lexical translation model p_lex(f|e) weight")
+(opts, _) = optparser.parse_args()
+weights = {'p(e)'       : float(opts.lm) ,
+	   'p(e|f)'     : float(opts.tm1),
+	   'p_lex(f|e)' : float(opts.tm2),
+	   'length' : 0.9834,
+	   'lr' : -38.2056,
+	   'comc' : -0.3933,
+	   'colc' : -0.8361,
+	   'punct' : -0.4941,
+	   'coms' : 2.0241,
+	   'cols' : 1.0897,
+	   'lmscore' : 0.0536,
+	   'oov' : -2.2636,
+	   'nbrown' : -0.4178,
+	   'oop' : -2.2746,
+	   'weirdness' : 0.6126}
+posin=''
+if opts.input=="data/dev.100best+mod":
+	posin = "dev.pos.100best"
+elif opts.input=="data/test/100best+mod":
+	posin = "test.pos.100best"
+
+all_hyps = [pair.split(' ||| ') for pair in open(opts.input)]
+sents = [sent.strip() for sent in open(opts.ref)]
+num_sents = len(all_hyps) / 100
+if (opts.test):
+	for s in xrange(0, num_sents):
+		hyps_for_one_sent = all_hyps[s * 100:s * 100 + 100]
+		(best_score, best) = (-1e300, '')
+		for (num, hyp, feats) in hyps_for_one_sent:
+			score = 0.0
+			for feat in feats.split(' ')[:-1]:
+  				(k, v) = feat.split('=')
+  				score += weights[k] * float(v)
+			score = exp(score)
+			if score > best_score:
+  				(best_score, best) = (score, hyp)
+		try: 
+			sys.stdout.write("%s\n" % best)
+		except (Exception):
+			sys.exit(1)
+elif(opts.train):
+	assert num_sents == len(sents)
+	cand_class=[]
+	for s in xrange(0,num_sents):
+		hyps_for_one_sent = all_hyps[s * 100:s * 100 + 100]
+		sent= sents[s]
+		ref = sent.strip().split()
+		bleu_hyp=[]
+		for i,(num,hyp,feats) in enumerate(hyps_for_one_sent):
+			hyp = hyp.strip().split()
+			stats = [0 for i in xrange(10)]
+  			stats = [sum(scores) for scores in zip(stats, bleu.bleu1_stats(hyp,ref))]
+			bleu_hyp.append(bleu.bleu(stats))
+		pro_stats=[]
+		for i,bl1 in enumerate(bleu_hyp):
+			#for j,bl2 in enumerate(bleu_hyp):
+			j=0
+			while (j<i):
+				bl2= bleu_hyp[j]
+				#if not(abs(bl1-bl2))==0:
+				#if not(i==j):
+				diff = bl1-bl2
+					#label= ""
+					
+					#if diff < 0:
+					#	label= "NEG"
+					#else:
+					#	label= "POS"
+				#num1,hyp1,feat1= hyps_for_one_sent[i]
+				#num2,hyp2,feat2= hyps_for_one_sent[j]
+				
+				pro_stats.append(((hyps_for_one_sent[i][2],hyps_for_one_sent[j][2]),abs(diff),diff))
+				j += 1
+		pro_stats= sorted(pro_stats, key= lambda x: x[1])
+		out =sorted(list(sample(pro_stats, opts.sampleset)), key= lambda x:x[1])
+	
+		cand_class = merge_sort(cand_class,out)[-int(opts.prune):]
+		#print type(cand_class)
+		#print len(out),out[0]
+		#print len(pro_stats), pro_stats[0],pro_stats[-1]
+	sys.stderr.write(str(len(cand_class))+"\n")
+	print cand_class[:5]
+	print cand_class[-5:]
+	with open('data.csv', 'wb') as csvfile:
+		writer = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+		writer.writerow(["p(e)","p(e|f)","p(f|e)","length","lr","comc","colc","punct","coms","cols","lmscore","oov","nbrown","oop","weirdness","label"])
+		for i in cand_class:
+			label1="POS"
+			label2="NEG"
+			feats,absol,diff = i
+			if diff < 0:
+				label1="NEG"
+				label2= "POS"
+			feats1,feats2=feats
+			sfeats1= feats1.strip().split()
+			sfeats2= feats2.strip().split()
+			#pos1= sfeats1[-2].split("##")
+			#pos2= sfeats2[-2].split("##")
+			#posfeats1 = list(sendstats(pos1,pos2))
+			#posfeats2 = list(sendstats(pos2,pos1))
+			#br1 = sfeats1[-1].split("##")
+			#br2 = sfeats2[-1].split("##")
+			#brfeats1 = list(sendstats(br1,br2))
+			#brfeats2= list(sendstats(br2,br1))
+			towrite=[str(float(feat1.split('=')[1])-float(feat2.split('=')[1])) for feat1,feat2 in zip(sfeats1[:-1],sfeats2[:-1])]+[label1]
+			writer.writerow(towrite)
+			towrite=[str(float(feat1.split('=')[1])-float(feat2.split('=')[1])) for feat2,feat1 in zip(sfeats1[:-1],sfeats2[:-1])]+[label2]
+			writer.writerow(towrite)
+
